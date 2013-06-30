@@ -136,89 +136,35 @@ def console_output(string):
 #       * The string SHOULD CONTAIN time zone either in 
 #       text or number format. It is parse-able. Using local 
 #       time zone is favoured but not mandatory. 
-import calendar
-import time
-from datetime import tzinfo, timedelta, datetime
-from dateutil import parser as dtparser, tz
-from third.PyRSS2Gen import _format_date
+from datetime import datetime
+from pytz import timezone
+import times
 
-ZERO = timedelta(0)
-
-class FixedOffsetTimeZone(tzinfo):
-    """
-    Fixed offset in minutes east from UTC.
-
-    See ``third/timezone_sample.py`` for more samples.
-
-    """
-    def __init__(self, offset, name):
-        '''
-        Build a fixed offset ``tzinfo`` object.  No DST support. 
-
-        :type offset: int
-        :param offset:
-            Offset of your timezone in **MINUTES**
-        :type name: str
-        :param name:
-            The name string of your timezone
-        '''
-        self.__offset = timedelta(minutes = offset)
-        self.__name = name
-
-    def utcoffset(self, dt):
-        return self.__offset
-
-    def tzname(self, dt):
-        return self.__name
-
-    def dst(self, dt):
-        return ZERO
-
-SNSAPI_TIMEZONE = FixedOffsetTimeZone(0, 'GMT')
-
-try:
-    SNSAPI_TIMEZONE = tz.tzlocal()
-    logger.info("get local timezone OK")
-except Exception as e:
-    # Silently ignore it and degrades to default TZ (GMT).
-    # Logger has not been set at the moment.
-    # 
-    # In case other methods refer to tzlocal(), 
-    # we fix it by the default TZ configured here.
-    # (The ``dtparser`` will refer to ``tz.tzlocal``)
-    logger.warning("Get local timezone failed. Use default GMT")
-    tz.tzlocal = lambda : SNSAPI_TIMEZONE
-
-def str2utc(s, tc = None):
+def str2utc(s):
     '''
-    :param tc: 
-        Timezone Correction (TC). A timezone suffix string. 
-        e.g. ``" +08:00"``, `` HKT``, etc.
-        Some platforms are know to return time string without TZ 
-        (e.g. Renren). Manually do the correction.
+    Convert time string to unix timestamp
+    The time string SHOULD contain timezone info either in number format or
+    in text format
     '''
-    if tc and tc.strip() != '':
-        s += tc
-
     try:
-        d = dtparser.parse(s)
-        #print d 
-        #print d.utctimetuple()
-        return calendar.timegm(d.utctimetuple())
-    except Exception, e:
-        logger.warning("error parsing time str '%s': %s", s, e)
-        return 0
+        dt = times.to_universal(s)
+        ts = times.to_unix(dt)
+        return ts
+    except ValueError, e:
+        logger.warning('Unknown time string: %s', s)
 
-def utc2str(u):
-    # Format to RFC822 time string in current timezone
-    return _format_date(datetime.fromtimestamp(u, SNSAPI_TIMEZONE))
-
-import re
-_PATTERN_HTML_TAG = re.compile('<[^<]+?>')
-def strip_html(text):
-    # Ref:
-    #    * http://stackoverflow.com/questions/753052/strip-html-from-strings-in-python
-    return re.sub(_PATTERN_HTML_TAG, '', text)
+def utc2str(u, tz = 'GMT'):
+    d = datetime.fromtimestamp(u)
+    try:
+        z = timezone(tz)
+    except:
+        z = timezone('GMT')
+        logger.warning('Unknown timezone, using GMT')
+    try:
+        s = z.localize(d).strftime('%a, %d %b %Y %H:%M:%S %Z')
+        return s
+    except ValueError, e:
+        logger.warning('Convert error: %s', e.message)
 
 import pickle
 
